@@ -3,53 +3,21 @@ source("00_Base.R")
 lasdir <- choose_folder(caption = "Select las dir:") #select dir to las or laz
 output <- choose_folder(caption = "Select output dir:") #output dir
 files <- list.files(lasdir, pattern="*.LAZ|*.LAS", full.names=T, recursive = T) #creates a list of files
-files
+files.cat <- catalog(lasdir)
+class(files.cat)
 
+#Function could be done in parallel maybe
+Rasters <- lapply(files, TSE, res = 1, method = 1, epsg = "+init=epsg:25829" )
 
-output <- "C:/GitHub/R_DEM_LIDAR_products/OUTPUT"
-epsg <- "+init=epsg:25829"
-delaunay <- T
-knnidw <- F
-kriging <- F
-res <- 0.5
+#TreeTops
+# For this dummy example, the chunk size is 80 m and the buffer is 10 m using a single core.
+?catalog
+opt_chunk_buffer(files.cat) <- 10
+opt_cores(files.cat)        <- 1L
+opt_chunk_size(files.cat)   <- 80            # small because this is a dummy example.
+opt_select(files.cat)       <- "xyz"         # read only the coordinates.
+opt_filter(files.cat)       <- "-keep_first" # read only first returns.
 
-#Read and display a catalog of las files
-lascat <- catalog(lasdir)
-lasfiles <- lascat@data$filename
-lascat@crs <- sp::CRS(epsg)
-
-for (i in lasfiles){
-    lasName <- tools::file_path_sans_ext(basename(i)) #lasname
-    
-    #read and remove values below 0
-    filt <- "-drop_z_below 0"
-    las = readLAS(i, filter = filt)
-
-    #mdt
-    if (delaunay == T & knnidw == F & kriging == F){
-        mdt <- grid_terrain(las, res = res, method = "delaunay") # fastest
-    } else if(delaunay == F & knnidw == T & kriging == F) {
-        mdt <- grid_terrain(las, res = res, method = "knnidw", k = 5, p = 2) #medium speed
-    } else if (delaunay == F & knnidw == F & kriging == T){
-        mdt <- grid_terrain(las, res = res, method = "kriging", k = 5) #SLOWEST
-    }
-    
-    lasnormalize(las,mdt) #normilizar para solo dejar altura de elementos sobre el suelo
-    
-    #mds
-    mds = grid_canopy(las, res = res)
-
-    #export raster files
-    r1 <- as.raster(mdt)
-    r2 <- as.raster(mds)
-    crs(r1) <- epsg
-    crs(r2) <- epsg
-    writeRaster(r1,
-                filename=paste(output,"/", lasName, "_mdt.tif", sep=''),
-                datatype="FLT4S",
-                overwrite=T)
-    writeRaster(r2,
-                filename=paste(output,"/", lasName, "_mds.tif", sep=''),
-                datatype="FLT4S",
-                overwrite=T)
-}
+opt    <- list(need_buffer = TRUE)   # catalog_apply will throw an error if buffer = 0
+output <- catalog_apply(project, my_tree_detection_method, ws = 5, .options = opt)
+Trees <- catalog_apply(files.cat, TreeTops, ws=1)
