@@ -64,8 +64,8 @@ TSE <- function (lasfile , res = 1, method = 1, epsg = "+init=epsg:25829",
 }
 
 #-------------------------------------------------------------------------------
-#Trees tops
-TreeTops <- function (cluster , ws = 1, output = "C:/GitHub/LIDAR_pRo/OUTPUT") {
+#Trees tops (PRUEBAS)
+TreeTops <- function (cluster , ws) {
     
     las <- readLAS(cluster)
     if (is.empty(las)) return(NULL)
@@ -79,6 +79,18 @@ TreeTops <- function (cluster , ws = 1, output = "C:/GitHub/LIDAR_pRo/OUTPUT") {
     return(ttops)
 }
 
+#-------------------------------------------------------------------------------
+# rumple (PRUEBAS)
+rumple_index_surface = function(cluster, res)
+{
+    las = readLAS(cluster)
+    if (is.empty(las)) return(NULL)
+    las    <- lasfiltersurfacepoints(las, 1)
+    rumple <- grid_metrics(las, rumple_index(X,Y,Z), res)
+    bbox   <- raster::extent(cluster)
+    rumple <- raster::crop(rumple, bbox)
+    return(rumple)
+}
 #_______________________________________________________________________________
 #Functions for 02_LAZS_class
 
