@@ -4,6 +4,9 @@ libraries <- c("rgeos","lidR", "raster", "rgdal", "gridExtra", "rgdal", "rstudio
 lapply(libraries, function (x) {if(x %in% rownames(installed.packages()) == FALSE) {install.packages(x)}})
 lapply(libraries, require,  character.only=T)
 
+devtools::install_github("Jean-Romain/rlas")
+devtools::install_github("Jean-Romain/lidR")
+
 #_______________________________________________________________________________
 #General functions
 choose_folder = function(caption = 'Select _______ file/directory:') {
@@ -28,73 +31,127 @@ choose_folder = function(caption = 'Select _______ file/directory:') {
     }
 }
 
+#hillshade ( from raster)
+hs <- function (x, alt = 40, az = 270) {
+    slope = terrain(x, opt='slope')
+    aspect = terrain(x, opt='aspect')
+    hs = hillShade(slope, aspect, alt, az)
+    return (hs)
+}
+
+#-------------------------------------------------------------------------------
+
 #_______________________________________________________________________________
-#Functions for 01_DEMS
+#Functions for 01_RLAZS
+
+
+#_______________________________________________________________________________
+#Functions for 02_RDEMS
 #-------------------------------------------------------------------------------
 #TSE 
 #Terrain, surface and elevation rasters from lidar classified las or laz
-TSE <- function (lasfile , res = 1, method = 1, epsg = "+init=epsg:25829", 
-                 output = "C:/GitHub/LIDAR_pRo/OUTPUT") {
+#generates hillshades from dtm and dsm
+TSE <- function (lasfile , res = 1, method = "knnidw", k = 5, p = 2,
+                 epsg = "+init=epsg:25829", 
+                 output = "C:/GitHub/LIDAR_pRo/OUTPUT",
+                 filterLas = "-drop_z_below 0") {
     
     lasName <- tools::file_path_sans_ext(basename(lasfile)) #lasname
-    las <- readLAS(lasfile, filter = "-drop_z_below 0") #read and filter below 0 values
     
-    #methods for grid_terrain from fastest to slowest
-    method <- ifelse(method == 1, "delaunay", ifelse(method == 2, "knnidw", "kriging")) 
+    #read and apply filter
+    las = readLAS(lasfile, filter = filterLas)
     
-    # DTM
-    DTM <- as.raster(grid_terrain(las, res = res, method = method)) 
-    crs(DTM) <- epsg
-    writeRaster(DTM, filename=paste(output,"/", "DTM_", lasName, ".tif", sep=''),
+    #mdt
+    if (method == "delaunay"){
+        mdt <- grid_terrain(las, res = res, method = "delaunay") # fastest
+    } else if(method == "knnidw") {
+        mdt <- grid_terrain(las, res = res, method = "knnidw", k = k, p = p) #medium speed
+    } else if (method == "kriging"){
+        mdt <- grid_terrain(las, res = res, method = "kriging", k = k) #SLOWEST
+    }
+    r1 <- as.raster(mdt)
+    crs(r1) <- epsg
+    
+    #mds
+    mds <- grid_canopy(las, res = res, na.fill = "knnidw", k = k, p = p)
+    r2 <- as.raster(mds)
+    crs(r2) <- epsg
+    
+    #mde
+    lasnormalize(las, mdt)
+    mde <- grid_canopy(las, res = res, na.fill = "knnidw", k = k, p = p)
+    r3 <- as.raster(mde)
+    crs(r3) <- epsg
+    lasunnormalize(las)
+    
+    #hillshade for r1
+    slope = terrain(r1, opt='slope')
+    aspect = terrain(r1, opt='aspect')
+    hs1 = hillShade(slope, aspect, 40, 270)
+    #hillshade for r2
+    slope = terrain(r2, opt='slope')
+    aspect = terrain(r2, opt='aspect')
+    hs2 = hillShade(slope, aspect, 40, 270)
+    
+    #export raster files
+    writeRaster(r1,
+                filename=paste(output,"/", lasName, "_mdt.tif", sep=''),
+                datatype="FLT4S",
+                overwrite=T)
+    writeRaster(hs1,
+                filename=paste(output,"/", lasName, "_mdt_hs.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     
-    # DSM here
-    DSM <- NA
-    
-    # DEM 
-    lasnormalize(las,DTM)
-    DEM <- as.raster(grid_canopy(las, res = res)) #DEM
-    crs(DEM) <- epsg
-    writeRaster(DEM, filename=paste(output,"/", "DEM_", lasName, ".tif", sep=''),
+    writeRaster(r2,
+                filename=paste(output,"/", lasName, "_mds.tif", sep=''),
+                datatype="FLT4S",
+                overwrite=T)
+    writeRaster(hs2,
+                filename=paste(output,"/", lasName, "_mds_hs.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     
-    return (list(lasName, DTM, DSM, DEM))
-}
-
-#-------------------------------------------------------------------------------
-#Trees tops (PRUEBAS)
-TreeTops <- function (cluster , ws) {
+    writeRaster(r3,
+                filename=paste(output,"/", lasName, "_mde.tif", sep=''),
+                datatype="FLT4S",
+                overwrite=T)
     
-    las <- readLAS(cluster)
-    if (is.empty(las)) return(NULL)
-    # Find the tree tops using a user-developed method (here simply a LMF).
-    ttops <- tree_detection(las, lmf(ws))
-    # ttops is a SpatialPointsDataFrame that contains the tree tops in our region of interest
-    # plus the trees tops in the buffered area. We need to remove the buffer otherwise we will get
-    # some trees more than once.
-    bbox  <- raster::extent(cluster)
-    ttops <- raster::crop(ttops, bbox)
-    return(ttops)
+    # return (list(lasName, r1, r2, r3))
 }
 
 #-------------------------------------------------------------------------------
-# rumple (PRUEBAS)
-rumple_index_surface = function(cluster, res)
-{
-    las = readLAS(cluster)
-    if (is.empty(las)) return(NULL)
-    las    <- lasfiltersurfacepoints(las, 1)
-    rumple <- grid_metrics(las, rumple_index(X,Y,Z), res)
-    bbox   <- raster::extent(cluster)
-    rumple <- raster::crop(rumple, bbox)
-    return(rumple)
+#TSEcatalog
+#para acceder al nombre del archivo hay que usar catalog@data$filename
+#Terrain, surface and elevation rasters from LIDAR catalog
+#generates hillshades from dtm and dsm
+TSEcatalog <- function (lascat , res = 1, method = "knnidw", k = 5, p = 2,
+                 epsg = "+init=epsg:25829", output = "C:/GitHub/LIDAR_pRo/OUTPUT") {
+    #mdt
+    if (method == "delaunay"){
+        mdt <- grid_terrain(lascat, res = res, method = "delaunay") # fastest
+    } else if(method == "knnidw") {
+        mdt <- grid_terrain(lascat, res = res, method = "knnidw", k = k, p = p) #medium speed
+    } else if (method == "kriging"){
+        mdt <- grid_terrain(lascat, res = res, method = "kriging", k = k) #SLOWEST
+    }
+    r1 <- as.raster(mdt)
+    crs(r1) <- epsg
+    
+    #mds
+    mds <- grid_canopy(lascat, res = res, na.fill = "knnidw", k = k, p = p)
+    r2 <- as.raster(mds)
+    crs(r2) <- epsg
+    
+    #mde
+    lasnormalize(lascat, mdt)
+    mde <- grid_canopy(lascat, res = res, na.fill = "knnidw", k = k, p = p)
+    r3 <- as.raster(mde)
+    crs(r3) <- epsg
+    lasunnormalize(lascat)
+
+    return (list(r1, r2, r3))
 }
-#_______________________________________________________________________________
-#Functions for 02_LAZS_class
-
-
 
 #_______________________________________________________________________________
 #Functions for 03_R-VIS
