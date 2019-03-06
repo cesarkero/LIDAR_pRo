@@ -1,11 +1,9 @@
-libraries <- c("rgeos","lidR", "raster", "rgdal", "gridExtra", "rgdal", "rstudioapi",
-               "httpuv", "leaflet", "mapview", "rgeos", "pbapply")
+# devtools::install_github("Jean-Romain/lidR", force = TRUE)
 
-lapply(libraries, function (x) {if(x %in% rownames(installed.packages()) == FALSE) {install.packages(x)}})
+libraries <- c("rlang", "rgeos", "raster", "rgdal", "gridExtra", "rstudioapi",
+               "httpuv", "leaflet", "rgeos", "pbapply", "sp", "sf", "lidR")
+
 lapply(libraries, require,  character.only=T)
-
-devtools::install_github("Jean-Romain/rlas")
-devtools::install_github("Jean-Romain/lidR")
 
 #_______________________________________________________________________________
 #General functions
