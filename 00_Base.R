@@ -123,16 +123,11 @@ TSE <- function (lasfile , res = 1, method = "knnidw", k = 5, p = 2,
 #para acceder al nombre del archivo hay que usar catalog@data$filename
 #Terrain, surface and elevation rasters from LIDAR catalog
 #generates hillshades from dtm and dsm
-TSEcatalog <- function (lascat , res = 1, method = "knnidw", k = 5, p = 2,
-                 epsg = "+init=epsg:25829", output = "C:/GitHub/LIDAR_pRo/OUTPUT") {
+TSEcatalog <- function (lascat , res = 1, method = "kriging(k = 5L)",
+                 epsg = "+init=epsg:25829") {
     #mdt
-    if (method == "delaunay"){
-        mdt <- grid_terrain(lascat, res = res, method = "delaunay") # fastest
-    } else if(method == "knnidw") {
-        mdt <- grid_terrain(lascat, res = res, method = "knnidw", k = k, p = p) #medium speed
-    } else if (method == "kriging"){
-        mdt <- grid_terrain(lascat, res = res, method = "kriging", k = k) #SLOWEST
-    }
+    mdt <- grid_terrain(lascat, res = res, algorithm = method) #SLOWEST
+    
     r1 <- as.raster(mdt)
     crs(r1) <- epsg
     

@@ -12,21 +12,17 @@
 
 #setting environment
 library(gridExtra)
-library(lidR)
 library(raster)
 library(lidR)
-require(maptools)
-require(rgdal)
-require(ggplot2)
+library(maptools)
+library(rgdal)
+library(ggplot2)
 library(raster)
-if (!require(rgrass7)) stop("rgrass7 PACKAGE MISSING")
-library("rgrass7")
 library(sp)
 library(rstudioapi)
 library(leaflet)
 library(mapview)
 library(rgeos)
-library(plot3D)
 
 # PARAMETERS R
 shpdirA <- "Z:/Proxectos/603_Mod_PE_SFaro/5_GIS/shp/Posiciones_infografias.shp" #capa de obervadores
