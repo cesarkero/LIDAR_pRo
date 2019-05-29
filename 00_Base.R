@@ -1,7 +1,7 @@
 # devtools::install_github("Jean-Romain/lidR", force = TRUE)
 
-libraries <- c("rlang", "rgeos", "raster", "rgdal", "gridExtra", "rstudioapi",
-               "httpuv", "leaflet", "rgeos", "pbapply", "sp", "sf", "lidR")
+libraries <- c("rlang","rgeos","raster","rgdal","gridExtra","rstudioapi",
+               "httpuv","leaflet","rgeos","pbapply","sp","sf","lidR","stringr")
 
 lapply(libraries, require,  character.only=T)
 
@@ -29,6 +29,7 @@ choose_folder = function(caption = 'Select _______ file/directory:') {
     }
 }
 
+#-------------------------------------------------------------------------------
 #hillshade ( from raster)
 hs <- function (x, alt = 40, az = 270) {
     slope = terrain(x, opt='slope')
@@ -93,28 +94,28 @@ TSE <- function (lasfile , res = 1, method = "knnidw", k = 5, p = 2,
     
     #export raster files
     writeRaster(r1,
-                filename=paste(output,"/", lasName, "_mdt.tif", sep=''),
+                filename=paste(output, lasName, "_mdt.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     writeRaster(hs1,
-                filename=paste(output,"/", lasName, "_mdt_hs.tif", sep=''),
+                filename=paste(output, lasName, "_mdt_hs.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     
     writeRaster(r2,
-                filename=paste(output,"/", lasName, "_mds.tif", sep=''),
+                filename=paste(output, lasName, "_mds.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     writeRaster(hs2,
-                filename=paste(output,"/", lasName, "_mds_hs.tif", sep=''),
+                filename=paste(output, lasName, "_mds_hs.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
     
     writeRaster(r3,
-                filename=paste(output,"/", lasName, "_mde.tif", sep=''),
+                filename=paste(output, lasName, "_mde.tif", sep=''),
                 datatype="FLT4S",
                 overwrite=T)
-    
+    gc()
     # return (list(lasName, r1, r2, r3))
 }
 

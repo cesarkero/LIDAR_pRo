@@ -3,39 +3,60 @@ source("00_Base.R")
 # lasdir <- choose_folder(caption = "Select las dir:") #select dir to las or laz
 # output <- choose_folder(caption = "Select output dir:") #output dir
 
-lasdir <- "Z:/Material/SIG/_10_LIDAR_CNIG/2015"
-output <- "Z:/Material/SIG/_10_LIDAR_CNIG/2015_Catalogo"
+lasdir <- "C:/Users/cac/Desktop/Fernandina/LIDAR/"
+outcat <- "C:/Users/cac/Desktop/Fernandina/"
+output <- "C:/Users/cac/Desktop/Fernandina/LIDAR_pRo/"
+epsg = "+init=epsg:25829"
 res = 1
 
 #set catalog and global options
 cat <- catalog(list.files(lasdir, pattern = '*CIR.laz$', full.names = TRUE, recursive = TRUE))
+# cat@crs <- sp::CRS(epsg) #COMPROBAR SI ES NECESARIO TRAS LEER EL CATALOGO
 opt_chunk_buffer(cat) <- 20 #change buffer size
-opt_cores(cat) <- 3 #change cores option
+opt_cores(cat) <- 2 #change cores option
 opt_progress(cat) <- TRUE #see progress
 opt_laz_compression(cat) <- TRUE #laz compression
 summary(cat)
 
 #-------------------------------------------------------------------------------
-#MDT PROCESS
-MDT_output <- paste0(output,"/MDT/")
+# EXPORT CATALOG
+# rgdal::writeOGR(as.spatial(cat), paste0(outcat,"catalog.shp"),"catalog", driver="ESRI Shapefile") # shp
+# st_write(as.spatial(cat), paste0(outcat,"catalog.gpkg"), "LIDAR_CNIG_2015") 
+writeOGR(as.spatial(cat), paste0(outcat,"catalog.gpkg"),"LIDAR_CNIG_2015", driver="GPKG") #geopackage
+
+#-------------------------------------------------------------------------------
+# Apply a function over files (NO USAR DE MOMENTO)
+# Terrain, surface and elevation rasters from lidar classified las or laz
+# generates hillshades from dtm and dsm
+# Read and display a catalog of las files
+# lasfiles <- cat@data$filename
+# pblapply(lasfiles, TSE, res = res, method = "knnidw", k = 5, p = 2, epsg = epsg, 
+#          output = output, filterLas = "-drop_z_below 0")
+
+#-------------------------------------------------------------------------------
+# CREATE LIDAR_pRo
+#-------------------------------------------------------------------------------
+# MDT PROCESS (FUNCIONA)
+MDT_output <- paste0(output,"MDT_", str_pad(res, 3, "left", pad = "0"), "/")
 opt_output_files(cat) <- paste0(MDT_output,"{ORIGINALFILENAME}") #set filepaths
 MDT <- grid_terrain(cat, res = res, algorithm = "knnidw"(k = 5, p = 2)) 
-plot(MDT)
+# plot(MDT)
 
-#hillshade for MDT
+# hillshade for MDT
 slope = terrain(MDT, opt='slope')
 aspect = terrain(MDT, opt='aspect')
 MDT_hs = hillShade(slope, aspect, 40, 315)
 # plot(MDT_hs)
-#export raster files
+# export raster files
 writeRaster(MDT_hs,
             filename=paste(MDT_output,"/", "grid_terrain_hs.tif", sep=''),
             datatype="FLT4S",
             overwrite=T)
+gc()
 
 #-------------------------------------------------------------------------------
-#MDS PROCESS
-MDS_output <- paste0(output,"/MDS3/")
+# MDS PROCESS (FUNCIONA)
+MDS_output <- paste0(output,"MDS_", str_pad(res, 3, "left", pad = "0"), "/")
 opt_output_files(cat) <- paste0(MDS_output,"{ORIGINALFILENAME}") #set filepaths
 # Method 1: point to raster. ojo, crea vacios donde no hay vegetacion.
 # MDS <- grid_canopy(cat, res = res, p2r())
@@ -44,19 +65,17 @@ MDS <- grid_canopy(cat, res = res, dsmtin())
 # Method 3: Khosravipour et al. pitfree algorithm
 # MDS <- grid_canopy(cat, res = res, pitfree(c(0,2,5,10,15), c(0, 1.5)))
 
-#hillshade for MDE
+# hillshade for MDE
 slope = terrain(MDS, opt='slope')
 aspect = terrain(MDS, opt='aspect')
 MDS_hs = hillShade(slope, aspect, 40, 315)
-plot(MDS_hs)
-#export raster files
+# plot(MDS_hs)
+# export raster files
 writeRaster(MDS_hs,
             filename=paste(MDS_output,"/", "MDS_hs.tif", sep=''),
             datatype="FLT4S",
             overwrite=T)
-
-
-
+gc()
 
 #-------------------------------------------------------------------------------
 # MDE PROCESS
@@ -86,6 +105,8 @@ system.time({
 })
 
 
+#-------------------------------------------------------------------------------
+# BENCHMARK
 # Method 1: point to raster
 MDE1 = grid_canopy(MDE, 1, p2r())
 plot(MDE1, col = height.colors(50))
