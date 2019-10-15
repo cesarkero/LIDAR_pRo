@@ -31,7 +31,7 @@ choose_folder = function(caption = 'Select _______ file/directory:') {
 
 #-------------------------------------------------------------------------------
 #hillshade ( from raster)
-hs <- function (x, alt = 40, az = 270) {
+hs <- function (x, alt = 40, az = 315) {
     slope = terrain(x, opt='slope')
     aspect = terrain(x, opt='aspect')
     hs = hillShade(slope, aspect, alt, az)
@@ -39,13 +39,94 @@ hs <- function (x, alt = 40, az = 270) {
 }
 
 #-------------------------------------------------------------------------------
+#Get the folderpath of a filepath or folderpath
+folderpath <- function(path) {
+    x <- setdiff(strsplit(path,"/|\\\\")[[1]], "")
+    paste0(paste(x[-length(x)], collapse = "/"),"/")
+}
 
 #_______________________________________________________________________________
-#Functions for 01_RLAZS
+# Functions for CATALOG
+#_______________________________________________________________________________
 
+#-------------------------------------------------------------------------------
+# LASCATALOG
+#-------------------------------------------------------------------------------
+# Creates a catalog with all files with pattern, returns catalog and writes gpkg
+# lasdir is a folder where .laz files are (is going to be mapped recursively)
+# outputdir is a folder where all lidar product will be saved
+# pattern will filter the lidar files based on extension or something in the filename
+# clipcat to execute or not a clip over the catalog
+# clipcatbuf in case you want to clip with an extra buffer over the clipcatshape
+# clipcatshape is the shp or gpkg to make the clip 
+lascatalog <- function(lasdir, outputdir, pattern = '*COL.laz$|*COL.LAZ$', catname = "Catalog_COL",
+                       clipcat = TRUE, clipcatbuf = FALSE, clipbuf = 1000, clipcatshape,
+                       cat_chunk_buffer = 20,
+                       cores = 4,
+                       progress = TRUE,
+                       laz_compression = TRUE,
+                       epsg = "+init=epsg:25829",
+                       retilecatalog = FALSE, tile_chunk_buffer = 10, tile_chunk_size = 1000,
+                       filterask = FALSE, filter = "-keep_first -drop_z_below 2"){
+    
+    cat <- catalog(list.files(path = lasdir, recursive = TRUE, pattern = pattern, full.names = TRUE))
+    projection(cat) <- epsg
+    opt_progress(cat) <- progress #see progress
+    opt_laz_compression(cat) <- laz_compression #laz compression
+    opt_cores(cat) <- cores #change cores option
+    
+    if (clipcat == TRUE) {
+        opt_output_files(cat) <- paste0(output, "Catalog_clip")
+        if (clipcatbuf == TRUE) {
+            cat = lasclip(cat, buffer(clipcatshape, width=1000)) #clip from buffer
+        } else {
+            cat = lasclip(cat, clipcatshape)
+        }
+    }
+    
+    if (retilecatalog == FALSE){
+        opt_chunk_buffer(cat) <- cat_chunk_buffer #change buffer size
+        writeOGR(as.spatial(cat), paste0(outputdir,paste0(catname,".gpkg")),"catalog",driver="GPKG") #geopackage
+        save(cat, file = paste0(lasdir,paste0(catname,".RData")))
+        return(cat)
+    } else {
+        #crear nueva carpeta de retile en output
+        name <- paste0(output, basename(lasdir),"_retile_", toString(tile_chunk_size), "/")
+        dir.create(name)
+        cat <- catalog(list.files(path = lasdir, pattern = pattern, full.names = TRUE, recursive = TRUE))
+        projection(cat) <- epsg
+        opt_output_files(cat) <- paste0(name, basename(lasdir), "_","{XLEFT}","_","{YTOP}")
+        opt_chunk_buffer(cat) <- tile_chunk_buffer
+        opt_chunk_size(cat) <- tile_chunk_size
+        if (filterask == TRUE){
+            opt_filter(cat) <- filter
+        }
+        opt_laz_compression(cat) <- laz_compression #laz compression
+        newcat <- catalog_retile(cat)
+        writeOGR(as.spatial(newcat), paste0(name,paste0(catname,".gpkg")),"catalog", driver="GPKG") #geopackage
+        save(cat, file = paste0(lasdir,paste0(catname,".RData")))
+        return(newcat)
+    }
+}
+
+#-------------------------------------------------------------------------------
+# RETILE CATALOG (TO HIGHER OR SMALLER EXTENSION)
+#-------------------------------------------------------------------------------
+# INCORPORADO A LA FUNCION ANTERIOR
+retilecatalog <- function(lasdir, buffer = 10, chunk_size = 500,
+                          filter = "-keep_first -drop_z_below 2", lazcomp = TRUE){
+    cat <- lascatalog()
+    opt_output_files(cat) <- paste0(name, basename(lasdir), "_","{XLEFT}","_","{YTOP}")
+    opt_chunk_buffer(cat) <- buffer
+    opt_chunk_size(cat) <- chunk_size
+    opt_filter(cat) <- filter
+    opt_laz_compression(cat) <- lazcomp
+    newcat <- catalog_retile(cat)
+    return()
+}
 
 #_______________________________________________________________________________
-#Functions for 02_RDEMS
+#Functions for PRODUCTS
 #-------------------------------------------------------------------------------
 #TSE 
 #Terrain, surface and elevation rasters from lidar classified las or laz

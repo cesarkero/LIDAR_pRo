@@ -6,13 +6,11 @@ output <- choose_folder(caption = "Select output dir:") #output dir
 #Crear catálogo - hacer que los clusters coincidan con las dimensiones de las teselas 
 #esto sirve para que haya los mismos archivos que procesos
 #ojo porque no se ha encontrado como filtrar valores en el catalogo
-cat <- catalog(list.files(lasdir, pattern = '*COL.laz$', full.names = TRUE, recursive = TRUE))
-opt_chunk_buffer(cat) <- 20 #change buffer size
-opt_cores(cat) <- 3 #change cores option
-opt_progress(cat) <- TRUE #see progress
-opt_laz_compression(cat) <- TRUE #laz compression
-opt_output_files(cat) <- output #output files
-summary(cat)
+cat <- catalog(lasdir)
+cores(cat) <- 3
+buffer(cat) <- 20
+tiling_size(cat) <- round(cat@data$`Max X`[1] - cat@data$`Min X`[1])
+output_files(cat) <- output
 
 rasters <- catalog_apply(cat, TSEcatalog, res = 1, method = "knnidw", epsg = "+init=epsg:25829", 
          output = output)

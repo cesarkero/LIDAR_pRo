@@ -3,26 +3,50 @@ source("00_Base.R")
 # lasdir <- choose_folder(caption = "Select las dir:") #select dir to las or laz
 # output <- choose_folder(caption = "Select output dir:") #output dir
 
-lasdir <- "C:/Users/cac/Desktop/Fernandina/LIDAR/"
-outcat <- "C:/Users/cac/Desktop/Fernandina/"
-output <- "C:/Users/cac/Desktop/Fernandina/LIDAR_pRo/"
+lasdir <- "/media/cesarkero/USB4TB/GIS/LIDAR_2015_CNIG/"
+output <- "/media/cesarkero/USB4TB/GIS/LIDAR_2015_CNIG/"
+clipcatshape = readOGR(dsn = "/home/cesarkero/GoogleDrive/ModlEarth/Estructura/Web/Fondos/LIDAR_compostela/Santiago.gpkg", "Santiago")
 epsg = "+init=epsg:25829"
-res = 1
-
-#set catalog and global options
-cat <- catalog(list.files(lasdir, pattern = '*CIR.laz$', full.names = TRUE, recursive = TRUE))
-# cat@crs <- sp::CRS(epsg) #COMPROBAR SI ES NECESARIO TRAS LEER EL CATALOGO
-opt_chunk_buffer(cat) <- 20 #change buffer size
-opt_cores(cat) <- 2 #change cores option
-opt_progress(cat) <- TRUE #see progress
-opt_laz_compression(cat) <- TRUE #laz compression
-summary(cat)
+res = 0.5
 
 #-------------------------------------------------------------------------------
-# EXPORT CATALOG
-# rgdal::writeOGR(as.spatial(cat), paste0(outcat,"catalog.shp"),"catalog", driver="ESRI Shapefile") # shp
-# st_write(as.spatial(cat), paste0(outcat,"catalog.gpkg"), "LIDAR_CNIG_2015") 
-writeOGR(as.spatial(cat), paste0(outcat,"catalog.gpkg"),"LIDAR_CNIG_2015", driver="GPKG") #geopackage
+# CREATE AND EXPORT LAZ/LAS CATALOG
+# WITHOUT RETILE
+#ojo, en galicia los archivos coloreados con COL pero los infrarrojo son IRC o CIR
+#ajustar pattern a esto
+# pattern = '*CIR.laz$|*CIR.LAZ$|*IRC.laz$|*IRC.LAZ$'
+# pattern = '*COL.laz$|*COL.LAZ$'
+# cambiar catname acorde al pattern
+cat <- lascatalog(lasdir = lasdir, outputdir = output, pattern = '*CIR.laz$|*CIR.LAZ$|*IRC.laz$|*IRC.LAZ$',
+                  catname = "Catalog_CIR_IRC",
+                  clipcat = FALSE, clipcatbuf = FALSE, clipbuf = 1000, clipcatshape = clipshape,
+                  cat_chunk_buffer = 20,
+                  cores = 12, progress = TRUE,
+                  laz_compression = TRUE, epsg = epsg,
+                  retilecatalog = FALSE, tile_chunk_buffer = 10,
+                  tile_chunk_size = 1000,
+                  filterask = FALSE,
+                  filter = "-keep_first -drop_z_below 2")
+
+# WITH RETILE AND MAY BE FILTER
+# cat <- lascatalog(lasdir = lasdir, outputdir = output, pattern = '*COL.laz$ || *COL.LAZ$',
+#                   catname = "Catalog_COL_LAZ.gpkg",
+#                   cat_chunk_buffer = 20,
+#                   cores = 4, progress = TRUE,
+#                   laz_compression = TRUE, epsg = epsg,
+#                   retilecatalog = TRUE, tile_chunk_buffer = 10,
+#                   tile_chunk_size = 1000,
+#                   filterask = TRUE,
+#                   filter = "-keep_first -drop_z_below 2")
+
+#-------------------------------------------------------------------------------
+# CLIP CATALOG
+opt_output_files(cat) <- paste0("/home/cesarkero/GoogleDrive/ModlEarth/Estructura/Web/Fondos/LIDAR_compostela/", "Catalog_clip_Santiago_CIR_IRC")
+
+#clip directly from shp layer
+#careful if the area is too large as it will create an unique huge file
+# new_cat = lasclip(cat, buffer(clipshape, width=1000)) #clip from buffer
+new_cat = lasclip(cat, clipcatshape) 
 
 #-------------------------------------------------------------------------------
 # Apply a function over files (NO USAR DE MOMENTO)
@@ -43,9 +67,7 @@ MDT <- grid_terrain(cat, res = res, algorithm = "knnidw"(k = 5, p = 2))
 # plot(MDT)
 
 # hillshade for MDT
-slope = terrain(MDT, opt='slope')
-aspect = terrain(MDT, opt='aspect')
-MDT_hs = hillShade(slope, aspect, 40, 315)
+MDT_hs = hs(MDT)
 # plot(MDT_hs)
 # export raster files
 writeRaster(MDT_hs,
@@ -66,9 +88,7 @@ MDS <- grid_canopy(cat, res = res, dsmtin())
 # MDS <- grid_canopy(cat, res = res, pitfree(c(0,2,5,10,15), c(0, 1.5)))
 
 # hillshade for MDE
-slope = terrain(MDS, opt='slope')
-aspect = terrain(MDS, opt='aspect')
-MDS_hs = hillShade(slope, aspect, 40, 315)
+MDS_hs = hs(MDS)
 # plot(MDS_hs)
 # export raster files
 writeRaster(MDS_hs,
@@ -104,6 +124,7 @@ system.time({
     MDE_retile <- lasnormalize(cat_retile, tin()) 
 })
 
+gc()
 
 #-------------------------------------------------------------------------------
 # BENCHMARK
